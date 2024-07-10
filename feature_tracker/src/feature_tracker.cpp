@@ -2,20 +2,31 @@
 
 int FeatureTracker::n_id = 0;
 
+/* 检查是否够在边界里
+这个函数 inBorder 检查给定的点 pt 是否在图像的有效边界内，
+并且距离图像边缘 BORDER_SIZE 个像素。返回 true 表示点在边界内，返回 false 表示点在边界外。
+*/
 bool inBorder(const cv::Point2f &pt)
-{
+{   
+    // 设置边界是 1 
     const int BORDER_SIZE = 1;
+    /*
+    cvRound是 OpenCV 库中的一个函数，用于对浮点数进行四舍五入操作，并返回一个整数值。
+    这个函数的目的是将浮点数转换为最接近的整数，通常用于像素坐标等需要整数值的场景
+    */
     int img_x = cvRound(pt.x);
     int img_y = cvRound(pt.y);
     return BORDER_SIZE <= img_x && img_x < COL - BORDER_SIZE && BORDER_SIZE <= img_y && img_y < ROW - BORDER_SIZE;
 }
 
+// 删除那些跟踪失败的特征点，包括跟踪失败的和不在边界里的
 void reduceVector(vector<cv::Point2f> &v, vector<uchar> status)
 {
     int j = 0;
     for (int i = 0; i < int(v.size()); i++)
         if (status[i])
             v[j++] = v[i];
+    // 大小设置为最后的 j 
     v.resize(j);
 }
 
@@ -78,58 +89,97 @@ void FeatureTracker::addPoints()
     }
 }
 
+/*
+类方法 读取图片
+参数 Mat 图像 double 时间
+*/
 void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
-{
+{   
+    // 定义图像
     cv::Mat img;
+    // 计时器
     TicToc t_r;
+    // 当前时间
     cur_time = _cur_time;
 
+    // 如果需要均衡化
     if (EQUALIZE)
-    {
+    {   
+        // 进行直方图均衡化
         cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(3.0, cv::Size(8, 8));
         TicToc t_c;
+        // 对输入图像 _img 进行直方图均衡化 保存到img中
         clahe->apply(_img, img);
+        // 输出耗时
         ROS_DEBUG("CLAHE costs: %fms", t_c.toc());
     }
+    // 如果不需要均衡化 直接给到 img
     else
         img = _img;
 
+    // 检查后一阵图像是否为空
     if (forw_img.empty())
-    {
+    {   
+        // 前一帧 = 现在 = 后一帧
         prev_img = cur_img = forw_img = img;
     }
     else
     {
+        // 如果不为空 将传入的这帧图像 给到后一帧
         forw_img = img;
     }
 
+    // 清空后一帧的点
     forw_pts.clear();
 
+    // 当前帧的点大于 0 
     if (cur_pts.size() > 0)
-    {
+    {   
+        // 计时器
         TicToc t_o;
+        // 存放状态的向量
         vector<uchar> status;
+        // 错误点的向量
         vector<float> err;
+
+        // 利用金字塔光流跟踪特征点 
+        // 搜索窗口 cv::Size(21, 21)
+        // 金字塔层数 3
         cv::calcOpticalFlowPyrLK(cur_img, forw_img, cur_pts, forw_pts, status, err, cv::Size(21, 21), 3);
 
+        // 遍历匹配得到的后一帧中的特征点
         for (int i = 0; i < int(forw_pts.size()); i++)
+        {   
+            // 如果 i 特征点跟踪成功并且不在边界内 那么就将其状态设置为 0 即 false 跟踪失败
             if (status[i] && !inBorder(forw_pts[i]))
+            {
                 status[i] = 0;
+            }
+        }
+
+        // 删除上一帧 当前帧 下一帧的无效点
         reduceVector(prev_pts, status);
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);
+        // 删除无效点id
         reduceVector(ids, status);
+        // 删除当前帧中点未失真的点错误点
         reduceVector(cur_un_pts, status);
+        // 删除特征点跟踪次数计数中错误部分
         reduceVector(track_cnt, status);
         ROS_DEBUG("temporal optical flow costs: %fms", t_o.toc());
     }
 
+    // 计算每个点跟踪成功的次数
     for (auto &n : track_cnt)
         n++;
 
+    // 如果发布此帧
     if (PUB_THIS_FRAME)
     {
+        // 用基础矩阵筛选点
         rejectWithF();
+
         ROS_DEBUG("set mask begins");
         TicToc t_m;
         setMask();
@@ -167,15 +217,22 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
 }
 
 void FeatureTracker::rejectWithF()
-{
+{   
+    // 若果跟踪得到的点大于 8 个点
     if (forw_pts.size() >= 8)
-    {
+    {   
+
         ROS_DEBUG("FM ransac begins");
+        // 计时器
         TicToc t_f;
+        // 当前帧中未失真的点向量 和 下一帧中未失真的点向量
         vector<cv::Point2f> un_cur_pts(cur_pts.size()), un_forw_pts(forw_pts.size());
+        // 遍历
         for (unsigned int i = 0; i < cur_pts.size(); i++)
-        {
+        {   
+            // 临时变量 3 * 1 向量
             Eigen::Vector3d tmp_p;
+            
             m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
             tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
             tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
@@ -213,6 +270,7 @@ bool FeatureTracker::updateID(unsigned int i)
         return false;
 }
 
+// 读取相机的内参
 void FeatureTracker::readIntrinsicParameter(const string &calib_file)
 {
     ROS_INFO("reading paramerter of camera %s", calib_file.c_str());

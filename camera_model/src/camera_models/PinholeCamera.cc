@@ -289,6 +289,7 @@ PinholeCamera::PinholeCamera(const std::string& cameraName,
     }
 
     // Inverse camera projection matrix parameters
+    // 直接计算内参矩阵K的逆的元素
     m_inv_K11 = 1.0 / mParameters.fx();
     m_inv_K13 = -mParameters.cx() / mParameters.fx();
     m_inv_K22 = 1.0 / mParameters.fy();
@@ -449,14 +450,16 @@ PinholeCamera::liftSphere(const Eigen::Vector2d& p, Eigen::Vector3d& P) const
 void
 PinholeCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) const
 {
-    double mx_d, my_d,mx2_d, mxy_d, my2_d, mx_u, my_u;
+    double mx_d, my_d, mx2_d, mxy_d, my2_d, mx_u, my_u;
     double rho2_d, rho4_d, radDist_d, Dx_d, Dy_d, inv_denom_d;
     //double lambda;
 
     // Lift points to normalised plane
+    // 将像素平面上的点转换到相机归一化平面上
     mx_d = m_inv_K11 * p(0) + m_inv_K13;
     my_d = m_inv_K22 * p(1) + m_inv_K23;
 
+    // 判断是否畸变
     if (m_noDistortion)
     {
         mx_u = mx_d;
@@ -479,6 +482,7 @@ PinholeCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) cons
             rho2_d = mx2_d+my2_d;
             rho4_d = rho2_d*rho2_d;
             radDist_d = k1*rho2_d+k2*rho4_d;
+
             Dx_d = mx_d*radDist_d + p2*(rho2_d+2*mx2_d) + 2*p1*mxy_d;
             Dy_d = my_d*radDist_d + p1*(rho2_d+2*my2_d) + 2*p2*mxy_d;
             inv_denom_d = 1/(1+4*k1*rho2_d+6*k2*rho4_d+8*p1*my_d+8*p2*mx_d);

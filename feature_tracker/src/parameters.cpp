@@ -1,22 +1,46 @@
+/*
+ * @Author: DMU zhangxianglong
+ * @Date: 2024-07-10 09:04:56
+ * @LastEditTime: 2024-07-10 14:37:03
+ * @LastEditors: DMU zhangxianglong
+ * @FilePath: /VINS-Mono-comment/feature_tracker/src/parameters.cpp
+ * @Description: 
+ */
 #include "parameters.h"
-
-std::string IMAGE_TOPIC;
+// 图像话题名
+std::string IMAGE_TOPIC; 
+// IMU话题名
 std::string IMU_TOPIC;
-std::vector<std::string> CAM_NAMES;
-std::string FISHEYE_MASK;
-int MAX_CNT;
-int MIN_DIST;
-int WINDOW_SIZE;
-int FREQ;
+// 相机名   
+std::vector<std::string> CAM_NAMES; 
+// 鱼眼相机掩膜
+std::string FISHEYE_MASK; 
+// 最大计数
+int MAX_CNT; 
+// 最小距离
+int MIN_DIST; 
+// 窗口尺寸
+int WINDOW_SIZE; 
+// 发布频率
+int FREQ; 
+// 阈值
 double F_THRESHOLD;
+// 显示跟踪 
 int SHOW_TRACK;
-int STEREO_TRACK;
-int EQUALIZE;
-int ROW;
-int COL;
+// 双目跟踪 
+int STEREO_TRACK; 
+// 
+int EQUALIZE; 
+// 行数
+int ROW; 
+// 列数
+int COL; 
+// 焦距
 int FOCAL_LENGTH;
-int FISHEYE;
-bool PUB_THIS_FRAME;
+// 鱼眼镜头 
+int FISHEYE; 
+// 发布此帧
+bool PUB_THIS_FRAME; 
 
 template <typename T>
 T readParam(ros::NodeHandle &n, std::string name)

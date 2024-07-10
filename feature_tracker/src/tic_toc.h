@@ -1,4 +1,4 @@
-#pragma once
+#pragma once // 这是一种防止头文件被多次包含的预处理指令
 
 #include <ctime>
 #include <cstdlib>

@@ -73,30 +73,52 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     else
         PUB_THIS_FRAME = false;
     
-    // 
+    // 定义一个智能指针 保存ROS msg的图像
     cv_bridge::CvImageConstPtr ptr;
+    // 判断编码方式查看图像是否是灰度图像
     if (img_msg->encoding == "8UC1")
     {
+        // 保存图像信息
         sensor_msgs::Image img;
         img.header = img_msg->header;
         img.height = img_msg->height;
         img.width = img_msg->width;
+        // is_bigendian 是 img 的一个属性，用于表示该图像是够为大端
         img.is_bigendian = img_msg->is_bigendian;
+        
+        // 图像每行字节数
         img.step = img_msg->step;
+
+        // 实际像素数据
         img.data = img_msg->data;
+
+        // 设置图像编码方式为 灰度图像
         img.encoding = "mono8";
+
+        // 将 ROS 消息转为 OpenCV 格式
         ptr = cv_bridge::toCvCopy(img, sensor_msgs::image_encodings::MONO8);
     }
+    // 如果不是 8UC1 直接转换
     else
         ptr = cv_bridge::toCvCopy(img_msg, sensor_msgs::image_encodings::MONO8);
 
+    // 指针里的内容拿出来 放进 OpenCV Mat
     cv::Mat show_img = ptr->image;
+    
+    // 用于计时 
     TicToc t_r;
+
+    // 根据相机数量遍历，默认是1个
     for (int i = 0; i < NUM_OF_CAM; i++)
-    {
+    {   
         ROS_DEBUG("processing camera %d", i);
+        
+        // 如果不是一个相机或者不是双目跟
         if (i != 1 || !STEREO_TRACK)
+        {
+            // 第 i 个相机读取图片
             trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), img_msg->header.stamp.toSec());
+        }
         else
         {
             if (EQUALIZE)
@@ -224,6 +246,7 @@ int main(int argc, char **argv)
     readParameters(n);
 
     for (int i = 0; i < NUM_OF_CAM; i++)
+        // 从参数文件读取相机参数
         trackerData[i].readIntrinsicParameter(CAM_NAMES[i]);
 
     if(FISHEYE)

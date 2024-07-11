@@ -450,16 +450,17 @@ PinholeCamera::liftSphere(const Eigen::Vector2d& p, Eigen::Vector3d& P) const
 void
 PinholeCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) const
 {
+    // 
     double mx_d, my_d, mx2_d, mxy_d, my2_d, mx_u, my_u;
     double rho2_d, rho4_d, radDist_d, Dx_d, Dy_d, inv_denom_d;
     //double lambda;
 
     // Lift points to normalised plane
-    // 将像素平面上的点转换到相机归一化平面上
+    // 将像素平面上的点转换到相机归一化平面上，是畸变后的点
     mx_d = m_inv_K11 * p(0) + m_inv_K13;
     my_d = m_inv_K22 * p(1) + m_inv_K23;
 
-    // 判断是否畸变
+    // 判断是否畸变 一般来说是有的 所以这个if一般不满足条件
     if (m_noDistortion)
     {
         mx_u = mx_d;
@@ -478,6 +479,7 @@ PinholeCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) cons
             // proposed by Heikkila
             mx2_d = mx_d*mx_d;
             my2_d = my_d*my_d;
+
             mxy_d = mx_d*my_d;
             rho2_d = mx2_d+my2_d;
             rho4_d = rho2_d*rho2_d;
@@ -493,6 +495,7 @@ PinholeCamera::liftProjective(const Eigen::Vector2d& p, Eigen::Vector3d& P) cons
         else
         {
             // Recursive distortion model
+            // 递归失真模型
             int n = 8;
             Eigen::Vector2d d_u;
             distortion(Eigen::Vector2d(mx_d, my_d), d_u);
@@ -643,11 +646,10 @@ PinholeCamera::undistToPlane(const Eigen::Vector2d& p_u, Eigen::Vector2d& p) con
 /**
  * \brief Apply distortion to input point (from the normalised plane)
  *
- * \param p_u undistorted coordinates of point on the normalised plane
+ * \param p_u 归一化平面上没畸变的点 undistorted coordinates of point on the normalised plane
  * \return to obtain the distorted point: p_d = p_u + d_u
  */
-void
-PinholeCamera::distortion(const Eigen::Vector2d& p_u, Eigen::Vector2d& d_u) const
+void PinholeCamera::distortion(const Eigen::Vector2d& p_u, Eigen::Vector2d& d_u) const
 {
     double k1 = mParameters.k1();
     double k2 = mParameters.k2();

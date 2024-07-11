@@ -1,7 +1,7 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-10 09:04:56
- * @LastEditTime: 2024-07-10 14:22:13
+ * @LastEditTime: 2024-07-11 16:22:03
  * @LastEditors: DMU zhangxianglong
  * @FilePath: /VINS-Mono-comment/feature_tracker/src/feature_tracker.h
  * @Description: 
@@ -66,7 +66,7 @@ class FeatureTracker
     vector<cv::Point2f> pts_velocity;
     // 点的id
     vector<int> ids;
-    
+    // 特征点跟踪的成功次数
     vector<int> track_cnt;
     map<int, cv::Point2f> cur_un_pts_map;
     map<int, cv::Point2f> prev_un_pts_map;

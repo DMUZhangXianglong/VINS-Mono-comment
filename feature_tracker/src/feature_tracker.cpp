@@ -45,10 +45,12 @@ FeatureTracker::FeatureTracker()
 }
 
 void FeatureTracker::setMask()
-{
+{   
+    // 是否鱼眼镜头
     if(FISHEYE)
         mask = fisheye_mask.clone();
     else
+        // 生成一个尺寸与原图一样的纯白图像
         mask = cv::Mat(ROW, COL, CV_8UC1, cv::Scalar(255));
     
 
@@ -177,11 +179,13 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     // 如果发布此帧
     if (PUB_THIS_FRAME)
     {
-        // 用基础矩阵筛选点
+        // 先去畸变，然后用基础矩阵删除外点
         rejectWithF();
-
+        
         ROS_DEBUG("set mask begins");
+        // 计时器
         TicToc t_m;
+        // 设置掩膜
         setMask();
         ROS_DEBUG("set mask costs %fms", t_m.toc());
 
@@ -233,6 +237,7 @@ void FeatureTracker::rejectWithF()
             // 临时变量 3 * 1 向量
             Eigen::Vector3d tmp_p;
             
+            // 去畸变，找到特征点在图像上的正确位置
             m_camera->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
             tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + COL / 2.0;
             tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + ROW / 2.0;
@@ -246,7 +251,8 @@ void FeatureTracker::rejectWithF()
 
         vector<uchar> status;
         cv::findFundamentalMat(un_cur_pts, un_forw_pts, cv::FM_RANSAC, F_THRESHOLD, 0.99, status);
-        int size_a = cur_pts.size();
+        int size_a = cur_pts.size()
+        // 去除外点
         reduceVector(prev_pts, status);
         reduceVector(cur_pts, status);
         reduceVector(forw_pts, status);

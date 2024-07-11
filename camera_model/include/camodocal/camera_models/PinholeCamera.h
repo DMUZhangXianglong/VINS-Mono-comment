@@ -109,6 +109,7 @@ public:
                              const Eigen::Matrix<T, 3, 1>& P,
                              Eigen::Matrix<T, 2, 1>& p);
 
+    // 函数的重载，const 修饰符：表示该函数不会修改调用它的对象的成员变量
     void distortion(const Eigen::Vector2d& p_u, Eigen::Vector2d& d_u) const;
     void distortion(const Eigen::Vector2d& p_u, Eigen::Vector2d& d_u,
                     Eigen::Matrix2d& J) const;
@@ -134,8 +135,10 @@ public:
 
 private:
     Parameters mParameters;
-
+    
+    // 相机内参矩阵 K 的对应蒜素
     double m_inv_K11, m_inv_K13, m_inv_K22, m_inv_K23;
+    // 是否无畸变
     bool m_noDistortion;
 };
 

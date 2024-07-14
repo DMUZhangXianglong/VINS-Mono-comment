@@ -55,38 +55,47 @@ void FeatureTracker::setMask()
     
 
     // prefer to keep features that are tracked for long time
+    // 向量[pair<int, pair<p2f, int>>]
+    // 向量[pair<特征点跟踪成功次数, pair<特征点坐标, 特征点id>>]
     vector<pair<int, pair<cv::Point2f, int>>> cnt_pts_id;
-
     for (unsigned int i = 0; i < forw_pts.size(); i++)
         cnt_pts_id.push_back(make_pair(track_cnt[i], make_pair(forw_pts[i], ids[i])));
-
+    
+    // 按照第一个int从大到小排序
     sort(cnt_pts_id.begin(), cnt_pts_id.end(), [](const pair<int, pair<cv::Point2f, int>> &a, const pair<int, pair<cv::Point2f, int>> &b)
          {
             return a.first > b.first;
          });
 
+    // 清空
     forw_pts.clear();
     ids.clear();
     track_cnt.clear();
 
+    // 遍历后一帧中的点
     for (auto &it : cnt_pts_id)
-    {
+    {   
+        // 这个点的像素值为255，那么以这个点为圆心半径为MIN_DIST画圆，颜色为黑色，表示这个圆内的特征点只要一个
         if (mask.at<uchar>(it.second.first) == 255)
         {
             forw_pts.push_back(it.second.first);
             ids.push_back(it.second.second);
             track_cnt.push_back(it.first);
-            cv::circle(mask, it.second.first, MIN_DIST, 0, -1);
+            cv::circle(mask, it.second.first, MIN_DIST, 0, -1); // -1为厚度 表示画圆
         }
     }
 }
 
+// 将检测到特征点加入后一帧特征点向量中
 void FeatureTracker::addPoints()
 {
     for (auto &p : n_pts)
-    {
+    {   
+        // 把这个点加入到 forw_pts 中
         forw_pts.push_back(p);
+        // id设置为 -1 检测到点了 但是没有分配 id
         ids.push_back(-1);
+        // 跟踪成功次数设置为 1 
         track_cnt.push_back(1);
     }
 }
@@ -181,17 +190,20 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
     {
         // 先去畸变，然后用基础矩阵删除外点
         rejectWithF();
-        
+
+        // 设置掩膜
         ROS_DEBUG("set mask begins");
         // 计时器
         TicToc t_m;
-        // 设置掩膜
         setMask();
         ROS_DEBUG("set mask costs %fms", t_m.toc());
-
+        
+        // 检测提取特征点
         ROS_DEBUG("detect feature begins");
         TicToc t_t;
+        // 要提取的点数是最大点数 - 已经有的点数
         int n_max_cnt = MAX_CNT - static_cast<int>(forw_pts.size());
+        // 如果大于 0 表示需要提取
         if (n_max_cnt > 0)
         {
             if(mask.empty())
@@ -200,17 +212,23 @@ void FeatureTracker::readImage(const cv::Mat &_img, double _cur_time)
                 cout << "mask type wrong " << endl;
             if (mask.size() != forw_img.size())
                 cout << "wrong size " << endl;
+            // forw_img 要检测特征点的图像 
+            // n_pts 保存得到的特征点 
+            // 0.01：质量水平参数，用于筛选检测到的特征点。通常在 0 到 1 之间，较高的值会导致检测到的特征点更少，但质量更高
+            // MIN_DIST：最小欧几里得距离，表示检测到的特征点之间的最小距离，确保特征点之间不会太近
             cv::goodFeaturesToTrack(forw_img, n_pts, MAX_CNT - forw_pts.size(), 0.01, MIN_DIST, mask);
         }
         else
             n_pts.clear();
         ROS_DEBUG("detect feature costs: %fms", t_t.toc());
 
+        // 将检测到特征点加入后一帧特征点向量中
         ROS_DEBUG("add feature begins");
         TicToc t_a;
         addPoints();
         ROS_DEBUG("selectFeature costs: %fms", t_a.toc());
     }
+    // 迭代 为下一次循环做准备
     prev_img = cur_img;
     prev_pts = cur_pts;
     prev_un_pts = cur_un_pts;
@@ -264,6 +282,7 @@ void FeatureTracker::rejectWithF()
     }
 }
 
+// 更新特征点的 id
 bool FeatureTracker::updateID(unsigned int i)
 {
     if (i < ids.size())
@@ -283,6 +302,7 @@ void FeatureTracker::readIntrinsicParameter(const string &calib_file)
     m_camera = CameraFactory::instance()->generateCameraFromYamlFile(calib_file);
 }
 
+// 显示未畸变
 void FeatureTracker::showUndistortion(const string &name)
 {
     cv::Mat undistortedImg(ROW + 600, COL + 600, CV_8UC1, cv::Scalar(0));

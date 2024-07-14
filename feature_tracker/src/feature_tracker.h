@@ -1,13 +1,12 @@
 /*
  * @Author: DMU zhangxianglong
- * @Date: 2024-07-10 09:04:56
- * @LastEditTime: 2024-07-11 16:22:03
+ * @Date: 2024-07-09 22:09:51
+ * @LastEditTime: 2024-07-14 09:56:49
  * @LastEditors: DMU zhangxianglong
- * @FilePath: /VINS-Mono-comment/feature_tracker/src/feature_tracker.h
+ * @FilePath: /VINS-Mono-注释/feature_tracker/src/feature_tracker.h
  * @Description: 
  */
 #pragma once
-
 #include <cstdio>
 #include <iostream>
 #include <queue>
@@ -57,6 +56,7 @@ class FeatureTracker
     cv::Mat mask;
     cv::Mat fisheye_mask;
     cv::Mat prev_img, cur_img, forw_img;
+    
     vector<cv::Point2f> n_pts;
     // 上一帧 当前帧 下一帧特征点
     vector<cv::Point2f> prev_pts, cur_pts, forw_pts;

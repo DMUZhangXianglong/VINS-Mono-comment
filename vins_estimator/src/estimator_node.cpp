@@ -1,3 +1,12 @@
+/*
+ * @Author: DMU zhangxianglong
+ * @Date: 2024-07-09 22:09:51
+ * @LastEditTime: 2024-07-14 11:47:51
+ * @LastEditors: DMU zhangxianglong
+ * @FilePath: /VINS-Mono-注释/vins_estimator/src/estimator_node.cpp
+ * @Description: 
+ */
+
 #include <stdio.h>
 #include <queue>
 #include <map>
@@ -15,55 +24,79 @@
 
 Estimator estimator;
 
+// 用于线程同步
 std::condition_variable con;
 double current_time = -1;
+// imu 缓存
 queue<sensor_msgs::ImuConstPtr> imu_buf;
+// 特征 缓存
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
+//
 queue<sensor_msgs::PointCloudConstPtr> relo_buf;
 int sum_of_wait = 0;
 
+// 线程锁
 std::mutex m_buf;
+// 状态
 std::mutex m_state;
 std::mutex i_buf;
 std::mutex m_estimator;
 
 double latest_time;
+// 中间量 P Q V
 Eigen::Vector3d tmp_P;
 Eigen::Quaterniond tmp_Q;
 Eigen::Vector3d tmp_V;
+// 加速度计偏置
 Eigen::Vector3d tmp_Ba;
+// 陀螺仪偏置
 Eigen::Vector3d tmp_Bg;
+// 初始加速度和角速度
 Eigen::Vector3d acc_0;
 Eigen::Vector3d gyr_0;
+// 特征初始化
 bool init_feature = 0;
 bool init_imu = 1;
+// 上一帧 imu 时间
 double last_imu_t = 0;
 
+
+//从IMU测量值imu_msg和上一个PVQ递推得到下一个tmp_Q，tmp_P，tmp_V，中值积分
 void predict(const sensor_msgs::ImuConstPtr &imu_msg)
 {
     double t = imu_msg->header.stamp.toSec();
+    // 是否为第一个 imu 数据
     if (init_imu)
     {
         latest_time = t;
         init_imu = 0;
         return;
     }
+    
+    // 时间迭代赋值
     double dt = t - latest_time;
     latest_time = t;
 
+    // x y z 方向上的线性加速度
     double dx = imu_msg->linear_acceleration.x;
     double dy = imu_msg->linear_acceleration.y;
     double dz = imu_msg->linear_acceleration.z;
+    // 组装成 3维 向量
     Eigen::Vector3d linear_acceleration{dx, dy, dz};
-
+    
+    // 3 个角速度
     double rx = imu_msg->angular_velocity.x;
     double ry = imu_msg->angular_velocity.y;
     double rz = imu_msg->angular_velocity.z;
+    // 组装向量
     Eigen::Vector3d angular_velocity{rx, ry, rz};
 
+    // 0 时刻加速度 世界坐标系下
     Eigen::Vector3d un_acc_0 = tmp_Q * (acc_0 - tmp_Ba) - estimator.g;
-
+    // 0 角速度 去掉了偏置
     Eigen::Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - tmp_Bg;
+    
+    // 四元数表示的旋转
     tmp_Q = tmp_Q * Utility::deltaQ(un_gyr * dt);
 
     Eigen::Vector3d un_acc_1 = tmp_Q * (linear_acceleration - tmp_Ba) - estimator.g;
@@ -72,7 +105,7 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
 
     tmp_P = tmp_P + dt * tmp_V + 0.5 * dt * dt * un_acc;
     tmp_V = tmp_V + dt * un_acc;
-
+    
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
 }
@@ -136,23 +169,28 @@ getMeasurements()
 }
 
 void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
-{
+{   
+    // 判断时间戳
     if (imu_msg->header.stamp.toSec() <= last_imu_t)
     {
         ROS_WARN("imu message in disorder!");
         return;
     }
+    // 当前时间戳给了上一时刻
     last_imu_t = imu_msg->header.stamp.toSec();
 
+    // 线程锁 将imu加入缓存队列
     m_buf.lock();
     imu_buf.push(imu_msg);
     m_buf.unlock();
     con.notify_one();
 
+    
     last_imu_t = imu_msg->header.stamp.toSec();
-
-    {
+    // 在这个作用域里互斥锁，避免了数据竞争
+    {   
         std::lock_guard<std::mutex> lg(m_state);
+        //从IMU测量值imu_msg和上一个PVQ递推得到下一个tmp_Q，tmp_P，tmp_V，中值积分
         predict(imu_msg);
         std_msgs::Header header = imu_msg->header;
         header.frame_id = "world";
@@ -161,21 +199,26 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
     }
 }
 
-
+// 特征回调函数
 void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
-{
+{   
+    // 如果没初始化
     if (!init_feature)
     {
         //skip the first detected feature, which doesn't contain optical flow speed
         init_feature = 1;
         return;
     }
+    // 成员变量线程锁
     m_buf.lock();
+    // 把特征加入队列
     feature_buf.push(feature_msg);
     m_buf.unlock();
+    // 确保了队列的线程安全和消息的同步处理
     con.notify_one();
 }
 
+// 判断是否需要重置
 void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
 {
     if (restart_msg->data == true)
@@ -206,6 +249,7 @@ void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 }
 
 // thread: visual-inertial odometry
+// 视觉-惯性里程计
 void process()
 {
     while (true)
@@ -340,11 +384,19 @@ void process()
 
 int main(int argc, char **argv)
 {
+    /*
+    订阅IMU话题
+    订阅特征
+    订阅是否重置
+    订阅位姿图，用于重定位
+    */
+    
     ros::init(argc, argv, "vins_estimator");
     ros::NodeHandle n("~");
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
     readParameters(n);
     estimator.setParameter();
+
 #ifdef EIGEN_DONT_PARALLELIZE
     ROS_DEBUG("EIGEN_DONT_PARALLELIZE");
 #endif
@@ -352,12 +404,21 @@ int main(int argc, char **argv)
 
     registerPub(n);
 
+    // 订阅 IMU 数据
     ros::Subscriber sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
+    
+    // 订阅特征点数据
     ros::Subscriber sub_image = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
+    
+    // 订阅
     ros::Subscriber sub_restart = n.subscribe("/feature_tracker/restart", 2000, restart_callback);
     ros::Subscriber sub_relo_points = n.subscribe("/pose_graph/match_points", 2000, relocalization_callback);
 
+    // 启动一个线程
     std::thread measurement_process{process};
+
+    // ros::spin(); 是 ROS（机器人操作系统）中的一个函数，用于在节点中进入一个事件处理循环。
+    // 这个函数会阻塞当前线程，处理所有来自 ROS 的回调函数，直到节点关闭
     ros::spin();
 
     return 0;

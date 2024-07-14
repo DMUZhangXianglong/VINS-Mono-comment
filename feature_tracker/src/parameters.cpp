@@ -1,9 +1,9 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-10 09:04:56
- * @LastEditTime: 2024-07-10 14:37:03
+ * @LastEditTime: 2024-07-13 17:21:16
  * @LastEditors: DMU zhangxianglong
- * @FilePath: /VINS-Mono-comment/feature_tracker/src/parameters.cpp
+ * @FilePath: /VINS-Mono-注释/feature_tracker/src/parameters.cpp
  * @Description: 
  */
 #include "parameters.h"
@@ -29,7 +29,7 @@ double F_THRESHOLD;
 int SHOW_TRACK;
 // 双目跟踪 
 int STEREO_TRACK; 
-// 
+// 是否均衡化
 int EQUALIZE; 
 // 行数
 int ROW; 

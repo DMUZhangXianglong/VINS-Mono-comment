@@ -13,6 +13,7 @@ class Utility
 {
   public:
     template <typename Derived>
+    
     static Eigen::Quaternion<typename Derived::Scalar> deltaQ(const Eigen::MatrixBase<Derived> &theta)
     {
         typedef typename Derived::Scalar Scalar_t;

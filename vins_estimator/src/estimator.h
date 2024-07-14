@@ -1,5 +1,13 @@
-#pragma once
+/*
+ * @Author: DMU zhangxianglong
+ * @Date: 2024-07-09 22:09:51
+ * @LastEditTime: 2024-07-14 11:15:16
+ * @LastEditors: DMU zhangxianglong
+ * @FilePath: /VINS-Mono-注释/vins_estimator/src/estimator.h
+ * @Description: 
+ */
 
+#pragma once
 #include "parameters.h"
 #include "feature_manager.h"
 #include "utility/utility.h"
@@ -26,8 +34,9 @@
 class Estimator
 {
   public:
+    // 构造函数
     Estimator();
-
+    // 设置参数
     void setParameter();
 
     // interface

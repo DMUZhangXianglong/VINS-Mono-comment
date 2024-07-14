@@ -15,7 +15,7 @@ vector<uchar> r_status;
 vector<float> r_err;
 queue<sensor_msgs::ImageConstPtr> img_buf; // 图像指针队列
 
-ros::Publisher pub_img,pub_match; // 图像发布和 匹配发布
+ros::Publisher pub_img, pub_match; // 图像发布和 匹配发布
 ros::Publisher pub_restart;       // 重启发布
 
 FeatureTracker trackerData[NUM_OF_CAM]; // 该类型的数组表示相机个数
@@ -108,7 +108,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     // 用于计时 
     TicToc t_r;
 
-    // 根据相机数量遍历，默认是1个
+    // 根据相机数量遍历，默认是1个 这个循环只会执行1次
     for (int i = 0; i < NUM_OF_CAM; i++)
     {   
         ROS_DEBUG("processing camera %d", i);
@@ -120,9 +120,11 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
             trackerData[i].readImage(ptr->image.rowRange(ROW * i, ROW * (i + 1)), img_msg->header.stamp.toSec());
         }
         else
-        {
+        {   
+            // 判断是否需要均衡化
             if (EQUALIZE)
-            {
+            {   
+                // 
                 cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE();
                 clahe->apply(ptr->image.rowRange(ROW * i, ROW * (i + 1)), trackerData[i].cur_img);
             }
@@ -130,6 +132,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 trackerData[i].cur_img = ptr->image.rowRange(ROW * i, ROW * (i + 1));
         }
 
+// 默认为 0 也就是这段代码不编译
 #if SHOW_UNDISTORTION
         trackerData[i].showUndistortion("undistrotion_" + std::to_string(i));
 #endif
@@ -139,15 +142,26 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
     {
         bool completed = false;
         for (int j = 0; j < NUM_OF_CAM; j++)
+            // j != 1 或 !STEREO_TRACK。这表示，当 j 不等于 1 或者 STEREO_TRACK 为 false 时
             if (j != 1 || !STEREO_TRACK)
+                // 如果 updateID 返回 true 那么 completed = true
                 completed |= trackerData[j].updateID(i);
+        // 如果 completed 为false则跳出循序
         if (!completed)
             break;
     }
 
+   // 是否发布此帧 
    if (PUB_THIS_FRAME)
    {
+        // 发布次数自增
         pub_count++;
+        // 声明 ROS 消息格式
+        /*
+        sensor_msgs::ChannelFloat32 是 ROS（Robot Operating System）中的一个消息类型，
+        它在 sensor_msgs 包中定义，用于表示一组浮点数数组。
+        ChannelFloat32 通常用于附加到点云消息中，提供每个点的附加信息，例如强度、颜色或其他自定义数据。
+        */
         sensor_msgs::PointCloudPtr feature_points(new sensor_msgs::PointCloud);
         sensor_msgs::ChannelFloat32 id_of_point;
         sensor_msgs::ChannelFloat32 u_of_point;
@@ -155,9 +169,11 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
         sensor_msgs::ChannelFloat32 velocity_x_of_point;
         sensor_msgs::ChannelFloat32 velocity_y_of_point;
 
+        // 赋值
         feature_points->header = img_msg->header;
         feature_points->header.frame_id = "world";
 
+        // 
         vector<set<int>> hash_ids(NUM_OF_CAM);
         for (int i = 0; i < NUM_OF_CAM; i++)
         {
@@ -185,6 +201,7 @@ void img_callback(const sensor_msgs::ImageConstPtr &img_msg)
                 }
             }
         }
+
         feature_points->channels.push_back(id_of_point);
         feature_points->channels.push_back(u_of_point);
         feature_points->channels.push_back(v_of_point);
@@ -263,11 +280,16 @@ int main(int argc, char **argv)
                 ROS_INFO("load mask success");
         }
     }
-
+    // 订阅原始图像数据
     ros::Subscriber sub_img = n.subscribe(IMAGE_TOPIC, 100, img_callback);
-
+    
+    // 发布跟踪的特征点
     pub_img = n.advertise<sensor_msgs::PointCloud>("feature", 1000);
+
+    // 发布跟踪特征点图 用于 rviz 显示
     pub_match = n.advertise<sensor_msgs::Image>("feature_img",1000);
+
+    // 发布重置
     pub_restart = n.advertise<std_msgs::Bool>("restart",1000);
     /*
     if (SHOW_TRACK)

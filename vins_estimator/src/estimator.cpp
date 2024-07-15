@@ -81,19 +81,29 @@ void Estimator::clearState()
     drift_correct_t = Vector3d::Zero();
 }
 
+/**
+ * @description: 处理IMU数据
+ * @param {double} dt:时间差
+ * @param {Vector3d} &linear_acceleration:线加速度
+ * @param {Vector3d} &angular_velocity:角速度
+ * @return {*}
+ */
 void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
-{
+{   
+    // 是否处理了第一帧IMU数据
     if (!first_imu)
     {
         first_imu = true;
         acc_0 = linear_acceleration;
         gyr_0 = angular_velocity;
     }
-
+    
+    // 判断是否为空指针
     if (!pre_integrations[frame_count])
     {
         pre_integrations[frame_count] = new IntegrationBase{acc_0, gyr_0, Bas[frame_count], Bgs[frame_count]};
     }
+    
     if (frame_count != 0)
     {
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
@@ -116,6 +126,7 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
 }
+
 
 void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const std_msgs::Header &header)
 {

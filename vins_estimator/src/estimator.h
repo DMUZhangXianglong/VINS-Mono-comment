@@ -1,9 +1,9 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-09 22:09:51
- * @LastEditTime: 2024-07-14 11:15:16
+ * @LastEditTime: 2024-07-15 15:12:53
  * @LastEditors: DMU zhangxianglong
- * @FilePath: /VINS-Mono-注释/vins_estimator/src/estimator.h
+ * @FilePath: /VINS-Mono-comment/vins_estimator/src/estimator.h
  * @Description: 
  */
 
@@ -85,19 +85,24 @@ class Estimator
     Matrix3d Rs[(WINDOW_SIZE + 1)];
     Vector3d Bas[(WINDOW_SIZE + 1)];
     Vector3d Bgs[(WINDOW_SIZE + 1)];
+    // 时间
     double td;
 
     Matrix3d back_R0, last_R, last_R0;
     Vector3d back_P0, last_P, last_P0;
     std_msgs::Header Headers[(WINDOW_SIZE + 1)];
 
+    //通过声明一个指向 IntegrationBase 类型的指针数组，并在需要时动态分配和释放内存，
+    //可以灵活地管理多个 IntegrationBase 对象。这在实现复杂算法和处理大量数据时非常有用。
     IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)];
+    
     Vector3d acc_0, gyr_0;
 
     vector<double> dt_buf[(WINDOW_SIZE + 1)];
     vector<Vector3d> linear_acceleration_buf[(WINDOW_SIZE + 1)];
     vector<Vector3d> angular_velocity_buf[(WINDOW_SIZE + 1)];
 
+    // 帧的编号
     int frame_count;
     int sum_of_outlier, sum_of_back, sum_of_front, sum_of_invalid;
 

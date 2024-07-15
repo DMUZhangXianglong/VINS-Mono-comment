@@ -1,9 +1,9 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-09 22:09:51
- * @LastEditTime: 2024-07-14 11:47:51
+ * @LastEditTime: 2024-07-15 14:50:24
  * @LastEditors: DMU zhangxianglong
- * @FilePath: /VINS-Mono-注释/vins_estimator/src/estimator_node.cpp
+ * @FilePath: /VINS-Mono-comment/vins_estimator/src/estimator_node.cpp
  * @Description: 
  */
 
@@ -21,11 +21,12 @@
 #include "parameters.h"
 #include "utility/visualization.h"
 
-
+// 初始化估计器对象
 Estimator estimator;
 
 // 用于线程同步
 std::condition_variable con;
+// 当前时间
 double current_time = -1;
 // imu 缓存
 queue<sensor_msgs::ImuConstPtr> imu_buf;
@@ -33,6 +34,8 @@ queue<sensor_msgs::ImuConstPtr> imu_buf;
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
 //
 queue<sensor_msgs::PointCloudConstPtr> relo_buf;
+
+// 
 int sum_of_wait = 0;
 
 // 线程锁
@@ -61,7 +64,8 @@ bool init_imu = 1;
 double last_imu_t = 0;
 
 
-//从IMU测量值imu_msg和上一个PVQ递推得到下一个tmp_Q，tmp_P，tmp_V，中值积分
+// 从IMU测量值imu_msg和上一个PVQ递推得到下一个tmp_Q，tmp_P，tmp_V，中值积分
+// 这部分结果只用于 rviz 显示
 void predict(const sensor_msgs::ImuConstPtr &imu_msg)
 {
     double t = imu_msg->header.stamp.toSec();
@@ -90,22 +94,31 @@ void predict(const sensor_msgs::ImuConstPtr &imu_msg)
     double rz = imu_msg->angular_velocity.z;
     // 组装向量
     Eigen::Vector3d angular_velocity{rx, ry, rz};
+    
 
-    // 0 时刻加速度 世界坐标系下
+    // 为 IMU 中值积分做准备
+    // 0 时刻加速度 世界坐标系下 去除偏置
     Eigen::Vector3d un_acc_0 = tmp_Q * (acc_0 - tmp_Ba) - estimator.g;
-    // 0 角速度 去掉了偏置
+    // 角速度平均值 去掉了偏置
     Eigen::Vector3d un_gyr = 0.5 * (gyr_0 + angular_velocity) - tmp_Bg;
     
-    // 四元数表示的旋转
+    // 旋转的递推
+    // Q_t+1 = Q_t*(w * dt)
     tmp_Q = tmp_Q * Utility::deltaQ(un_gyr * dt);
 
+    // 1 时刻的加速度 变换到世界坐标系下 然后减去重力
     Eigen::Vector3d un_acc_1 = tmp_Q * (linear_acceleration - tmp_Ba) - estimator.g;
 
+    // 加速度平均值
     Eigen::Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
 
+    // 位移递推
     tmp_P = tmp_P + dt * tmp_V + 0.5 * dt * dt * un_acc;
+
+    // 速度递推
     tmp_V = tmp_V + dt * un_acc;
     
+    // 下次迭代
     acc_0 = linear_acceleration;
     gyr_0 = angular_velocity;
 }
@@ -128,41 +141,53 @@ void update()
 
 }
 
-std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>>
-getMeasurements()
-{
+// 获取IMU测量 和特征点 将测量组装成向量形式
+std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> getMeasurements()
+{   
+    //v[pair<v[imu], feature>]
     std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
-
     while (true)
     {
+        // IMU 和 feature 有一个是空 就返回
         if (imu_buf.empty() || feature_buf.empty())
             return measurements;
-
+        
+        // 如果 IMU 缓冲区中最后一个数据的时间戳是否大于特征缓冲区中第一个数据的时间戳加上一个偏移量
+        // 如果大于那说明有够多的IMU数据，说明IMU数据包住了图像 那么不进入判断
         if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             //ROS_WARN("wait for imu, only should happen at the beginning");
             sum_of_wait++;
             return measurements;
         }
-
+        // 如过IMU的第一个元素的时间还小于特征队列第一个元素时间 还是说明IMU数据包住的图像 那么不进入判断
         if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             ROS_WARN("throw img, only should happen at the beginning");
             feature_buf.pop();
+            // 停止本次循环 直接进行下一次
             continue;
         }
+
+        // 取出第一个图像元素 并且弹出
         sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front();
         feature_buf.pop();
-
+        
+        // 取在图像之前的imu数据
         std::vector<sensor_msgs::ImuConstPtr> IMUs;
         while (imu_buf.front()->header.stamp.toSec() < img_msg->header.stamp.toSec() + estimator.td)
-        {
+        {   
+            // emplace_back 是 C++11 引入的一个 STL 容器方法，用于在容器末尾直接构造元素。
+            //与 push_back 不同，emplace_back 允许在容器中原地构造元素，从而避免了不必要的临时对象创建和复制，通常能提高性能
             IMUs.emplace_back(imu_buf.front());
             imu_buf.pop();
         }
+        //这里把下一个imu_msg也放进去了,但没有pop，因此当前图像帧和下一图像帧会共用这个imu_msg
         IMUs.emplace_back(imu_buf.front());
+        
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
+        //
         measurements.emplace_back(IMUs, img_msg);
     }
     return measurements;
@@ -184,7 +209,6 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
     imu_buf.push(imu_msg);
     m_buf.unlock();
     con.notify_one();
-
     
     last_imu_t = imu_msg->header.stamp.toSec();
     // 在这个作用域里互斥锁，避免了数据竞争
@@ -195,6 +219,7 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
         std_msgs::Header header = imu_msg->header;
         header.frame_id = "world";
         if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
+            // 发布 IMU 里程计
             pubLatestOdometry(tmp_P, tmp_Q, tmp_V, header);
     }
 }
@@ -220,16 +245,21 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 
 // 判断是否需要重置
 void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
-{
+{   
+    // 如果需要重置 
     if (restart_msg->data == true)
     {
         ROS_WARN("restart the estimator!");
         m_buf.lock();
+        
+        // 情况缓存队列里的内容
         while(!feature_buf.empty())
             feature_buf.pop();
         while(!imu_buf.empty())
             imu_buf.pop();
         m_buf.unlock();
+
+        // 清空系统状态 重置系统状态
         m_estimator.lock();
         estimator.clearState();
         estimator.setParameter();
@@ -251,21 +281,37 @@ void relocalization_callback(const sensor_msgs::PointCloudConstPtr &points_msg)
 // thread: visual-inertial odometry
 // 视觉-惯性里程计
 void process()
-{
+{   // 一直循环
     while (true)
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
+        // 创建一个名为 lk 的 std::unique_lock 对象，并立即锁定 m_buf 互斥体。
+        // 这种锁定是独占的，意味着其他线程在 lk 存在期间无法锁定 m_buf。
         std::unique_lock<std::mutex> lk(m_buf);
+        /*
+        con 是一个 std::condition_variable 对象。
+        con.wait(lk, ...) 会将当前线程置于等待状态，直到满足特定条件。
+        第二个参数是一个 lambda 表达式，用于定义等待的条件。在这个例子中，条件是 (measurements = getMeasurements()).size() != 0。
+        getMeasurements() 函数被调用，其返回值赋给 measurements。如果 measurements 的大小不为零，条件满足，线程将被唤醒。
+        如果条件不满足，线程会释放互斥体 m_buf 并进入等待状态。一旦条件变量 con 被其他线程通知，
+        当前线程将重新锁定互斥体 m_buf 并再次检查条件。
+        */
+
+        //等待上面两个接收数据完成就会被唤醒
         con.wait(lk, [&]
                  {
             return (measurements = getMeasurements()).size() != 0;
                  });
         lk.unlock();
+
         m_estimator.lock();
         for (auto &measurement : measurements)
-        {
+        {   
+            // 取出图像特征点
             auto img_msg = measurement.second;
+            // 速度 和 角速度
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
+            
             for (auto &imu_msg : measurement.first)
             {
                 double t = imu_msg->header.stamp.toSec();
@@ -410,8 +456,9 @@ int main(int argc, char **argv)
     // 订阅特征点数据
     ros::Subscriber sub_image = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
     
-    // 订阅
+    // 订阅重置
     ros::Subscriber sub_restart = n.subscribe("/feature_tracker/restart", 2000, restart_callback);
+    // 订阅重定位
     ros::Subscriber sub_relo_points = n.subscribe("/pose_graph/match_points", 2000, relocalization_callback);
 
     // 启动一个线程

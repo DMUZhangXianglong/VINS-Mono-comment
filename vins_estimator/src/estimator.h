@@ -1,7 +1,7 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-09 22:09:51
- * @LastEditTime: 2024-07-15 15:12:53
+ * @LastEditTime: 2024-07-16 09:40:00
  * @LastEditors: DMU zhangxianglong
  * @FilePath: /VINS-Mono-comment/vins_estimator/src/estimator.h
  * @Description: 
@@ -92,8 +92,9 @@ class Estimator
     Vector3d back_P0, last_P, last_P0;
     std_msgs::Header Headers[(WINDOW_SIZE + 1)];
 
-    //通过声明一个指向 IntegrationBase 类型的指针数组，并在需要时动态分配和释放内存，
-    //可以灵活地管理多个 IntegrationBase 对象。这在实现复杂算法和处理大量数据时非常有用。
+    // 通过声明一个指向 IntegrationBase 类型的指针数组，并在需要时动态分配和释放内存，
+    // 可以灵活地管理多个 IntegrationBase 对象。这在实现复杂算法和处理大量数据时非常有用。
+    // 这里初始化了10 + 1个对象
     IntegrationBase *pre_integrations[(WINDOW_SIZE + 1)];
     
     Vector3d acc_0, gyr_0;

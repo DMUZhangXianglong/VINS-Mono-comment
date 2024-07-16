@@ -9,7 +9,9 @@ using namespace Eigen;
 class IntegrationBase
 {
   public:
-    IntegrationBase() = delete;
+    IntegrationBase() = delete; // 删除默认构造函数
+
+    // 构造函数
     IntegrationBase(const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
                     const Eigen::Vector3d &_linearized_ba, const Eigen::Vector3d &_linearized_bg)
         : acc_0{_acc_0}, gyr_0{_gyr_0}, linearized_acc{_acc_0}, linearized_gyr{_gyr_0},
@@ -17,18 +19,33 @@ class IntegrationBase
             jacobian{Eigen::Matrix<double, 15, 15>::Identity()}, covariance{Eigen::Matrix<double, 15, 15>::Zero()},
           sum_dt{0.0}, delta_p{Eigen::Vector3d::Zero()}, delta_q{Eigen::Quaterniond::Identity()}, delta_v{Eigen::Vector3d::Zero()}
 
-    {
+    {   
+        /*
+        ACC_N 加速度测量噪声标准差
+        GYR_N 陀螺仪测量噪声标准差
+        ACC_W 加速度随机游走标准差
+        GYR_W 陀螺仪随机游走标准差
+        */
         noise = Eigen::Matrix<double, 18, 18>::Zero();
         noise.block<3, 3>(0, 0) =  (ACC_N * ACC_N) * Eigen::Matrix3d::Identity();
         noise.block<3, 3>(3, 3) =  (GYR_N * GYR_N) * Eigen::Matrix3d::Identity();
         noise.block<3, 3>(6, 6) =  (ACC_N * ACC_N) * Eigen::Matrix3d::Identity();
         noise.block<3, 3>(9, 9) =  (GYR_N * GYR_N) * Eigen::Matrix3d::Identity();
+        // 随机游走
         noise.block<3, 3>(12, 12) =  (ACC_W * ACC_W) * Eigen::Matrix3d::Identity();
         noise.block<3, 3>(15, 15) =  (GYR_W * GYR_W) * Eigen::Matrix3d::Identity();
     }
 
+    /**
+     * @description: 
+     * @param {double} dt:时间
+     * @param {Vector3d} &acc:加速度向量
+     * @param {Vector3d} &gyr:速度向量
+     * @return {*}
+     */    
     void push_back(double dt, const Eigen::Vector3d &acc, const Eigen::Vector3d &gyr)
     {
+        // 加入时间差缓存
         dt_buf.push_back(dt);
         acc_buf.push_back(acc);
         gyr_buf.push_back(gyr);
@@ -51,6 +68,10 @@ class IntegrationBase
             propagate(dt_buf[i], acc_buf[i], gyr_buf[i]);
     }
 
+    /**
+     * @description: 
+     * @return {*}
+     */    
     void midPointIntegration(double _dt, 
                             const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,
                             const Eigen::Vector3d &_acc_1, const Eigen::Vector3d &_gyr_1,
@@ -60,16 +81,28 @@ class IntegrationBase
                             Eigen::Vector3d &result_linearized_ba, Eigen::Vector3d &result_linearized_bg, bool update_jacobian)
     {
         //ROS_INFO("midpoint integration");
+        // 中值积分法3
+        
+        // 0 时刻加速度
         Vector3d un_acc_0 = delta_q * (_acc_0 - linearized_ba);
+        // 计算均值
         Vector3d un_gyr = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
+
+        // 更新旋转
         result_delta_q = delta_q * Quaterniond(1, un_gyr(0) * _dt / 2, un_gyr(1) * _dt / 2, un_gyr(2) * _dt / 2);
+
+        // 1 时刻加速度
         Vector3d un_acc_1 = result_delta_q * (_acc_1 - linearized_ba);
+
+        // 计算加速度均值
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
         result_delta_p = delta_p + delta_v * _dt + 0.5 * un_acc * _dt * _dt;
+        
         result_delta_v = delta_v + un_acc * _dt;
         result_linearized_ba = linearized_ba;
         result_linearized_bg = linearized_bg;         
-
+        
+        // 更新雅可比
         if(update_jacobian)
         {
             Vector3d w_x = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
@@ -127,6 +160,7 @@ class IntegrationBase
 
     }
 
+    // 传播
     void propagate(double _dt, const Eigen::Vector3d &_acc_1, const Eigen::Vector3d &_gyr_1)
     {
         dt = _dt;
@@ -138,6 +172,7 @@ class IntegrationBase
         Vector3d result_linearized_ba;
         Vector3d result_linearized_bg;
 
+        // 中点积分
         midPointIntegration(_dt, acc_0, gyr_0, _acc_1, _gyr_1, delta_p, delta_q, delta_v,
                             linearized_ba, linearized_bg,
                             result_delta_p, result_delta_q, result_delta_v,
@@ -145,6 +180,7 @@ class IntegrationBase
 
         //checkJacobian(_dt, acc_0, gyr_0, acc_1, gyr_1, delta_p, delta_q, delta_v,
         //                    linearized_ba, linearized_bg);
+       
         delta_p = result_delta_p;
         delta_q = result_delta_q;
         delta_v = result_delta_v;
@@ -195,6 +231,7 @@ class IntegrationBase
     Eigen::Matrix<double, 15, 15> jacobian, covariance;
     Eigen::Matrix<double, 15, 15> step_jacobian;
     Eigen::Matrix<double, 15, 18> step_V;
+    // 噪声矩阵
     Eigen::Matrix<double, 18, 18> noise;
 
     double sum_dt;

@@ -1,7 +1,7 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-09 22:09:51
- * @LastEditTime: 2024-07-15 14:50:24
+ * @LastEditTime: 2024-07-16 15:57:11
  * @LastEditors: DMU zhangxianglong
  * @FilePath: /VINS-Mono-comment/vins_estimator/src/estimator_node.cpp
  * @Description: 
@@ -305,6 +305,8 @@ void process()
         lk.unlock();
 
         m_estimator.lock();
+        
+        // 遍历测量中的每个元素，
         for (auto &measurement : measurements)
         {   
             // 取出图像特征点
@@ -353,6 +355,7 @@ void process()
                     //printf("dimu: dt:%f a: %f %f %f w: %f %f %f\n",dt_1, dx, dy, dz, rx, ry, rz);
                 }
             }
+            
             // set relocalization frame
             sensor_msgs::PointCloudConstPtr relo_msg = NULL;
             while (!relo_buf.empty())

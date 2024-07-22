@@ -1,7 +1,7 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-09 22:09:51
- * @LastEditTime: 2024-07-16 15:57:11
+ * @LastEditTime: 2024-07-22 16:00:45
  * @LastEditors: DMU zhangxianglong
  * @FilePath: /VINS-Mono-comment/vins_estimator/src/estimator_node.cpp
  * @Description: 
@@ -144,7 +144,7 @@ void update()
 // 获取IMU测量 和特征点 将测量组装成向量形式
 std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> getMeasurements()
 {   
-    //v[pair<v[imu], feature>]
+    //vector[pair<vector[imu], feature>]
     std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
     while (true)
     {
@@ -154,6 +154,7 @@ std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointC
         
         // 如果 IMU 缓冲区中最后一个数据的时间戳是否大于特征缓冲区中第一个数据的时间戳加上一个偏移量
         // 如果大于那说明有够多的IMU数据，说明IMU数据包住了图像 那么不进入判断
+        // back元素是最新的 front元素是最旧的
         if (!(imu_buf.back()->header.stamp.toSec() > feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             //ROS_WARN("wait for imu, only should happen at the beginning");
@@ -161,24 +162,27 @@ std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointC
             return measurements;
         }
         // 如过IMU的第一个元素的时间还小于特征队列第一个元素时间 还是说明IMU数据包住的图像 那么不进入判断
+        // 如果进入循环，说明第队首的帧图像太旧了，然后得移除
         if (!(imu_buf.front()->header.stamp.toSec() < feature_buf.front()->header.stamp.toSec() + estimator.td))
         {
             ROS_WARN("throw img, only should happen at the beginning");
+            // 移除队首元素
             feature_buf.pop();
             // 停止本次循环 直接进行下一次
             continue;
         }
 
-        // 取出第一个图像元素 并且弹出
+        // 取出第一个图像元素 并且移除
         sensor_msgs::PointCloudConstPtr img_msg = feature_buf.front();
         feature_buf.pop();
         
-        // 取在图像之前的imu数据
+        // 取在图像之前的imu数据 这里存放了很多个IMU数据 所以命名为IMUs
         std::vector<sensor_msgs::ImuConstPtr> IMUs;
         while (imu_buf.front()->header.stamp.toSec() < img_msg->header.stamp.toSec() + estimator.td)
         {   
             // emplace_back 是 C++11 引入的一个 STL 容器方法，用于在容器末尾直接构造元素。
-            //与 push_back 不同，emplace_back 允许在容器中原地构造元素，从而避免了不必要的临时对象创建和复制，通常能提高性能
+            // 与 push_back 不同，emplace_back 允许在容器中原地构造元素，从而避免了不必要的临时对象创建和复制，通常能提高性能
+            // 实际上是把这一阵图像 img_msg 对应的所以满足条件的IMU数据放进去
             IMUs.emplace_back(imu_buf.front());
             imu_buf.pop();
         }
@@ -187,7 +191,7 @@ std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointC
         
         if (IMUs.empty())
             ROS_WARN("no imu between two image");
-        //
+        // 组装成vector[pair<vector[imu], feature>]的形式
         measurements.emplace_back(IMUs, img_msg);
     }
     return measurements;
@@ -236,7 +240,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
     }
     // 成员变量线程锁
     m_buf.lock();
-    // 把特征加入队列
+    // 把特征加入队列尾部
     feature_buf.push(feature_msg);
     m_buf.unlock();
     // 确保了队列的线程安全和消息的同步处理
@@ -285,6 +289,7 @@ void process()
     while (true)
     {
         std::vector<std::pair<std::vector<sensor_msgs::ImuConstPtr>, sensor_msgs::PointCloudConstPtr>> measurements;
+        
         // 创建一个名为 lk 的 std::unique_lock 对象，并立即锁定 m_buf 互斥体。
         // 这种锁定是独占的，意味着其他线程在 lk 存在期间无法锁定 m_buf。
         std::unique_lock<std::mutex> lk(m_buf);
@@ -311,26 +316,42 @@ void process()
         {   
             // 取出图像特征点
             auto img_msg = measurement.second;
-            // 速度 和 角速度
+            
+            // 定义线速度 和 角速度
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
             
+            // 遍历每一帧IMU数据
             for (auto &imu_msg : measurement.first)
-            {
+            {   
+                // 这一帧imu的时间
                 double t = imu_msg->header.stamp.toSec();
+                // 这一组imu对应的图像的时间
                 double img_t = img_msg->header.stamp.toSec() + estimator.td;
+
+
+                // imu时间 < 图像的时间
                 if (t <= img_t)
-                { 
+                {   
+                    // current_time的初始值=-1
                     if (current_time < 0)
+                    {
                         current_time = t;
+                    }
+
                     double dt = t - current_time;
+                    // 断言用于调试 定位出问题的位置
                     ROS_ASSERT(dt >= 0);
                     current_time = t;
+                    
+                    // 取出IMU中的数据
                     dx = imu_msg->linear_acceleration.x;
                     dy = imu_msg->linear_acceleration.y;
                     dz = imu_msg->linear_acceleration.z;
                     rx = imu_msg->angular_velocity.x;
                     ry = imu_msg->angular_velocity.y;
                     rz = imu_msg->angular_velocity.z;
+                    
+                    // dt 是这一组IMU中两帧之间的时间差 dx ... 是IMU的读数
                     estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
                     //printf("imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
 
@@ -421,6 +442,7 @@ void process()
                 pubRelocalization(estimator);
             //ROS_ERROR("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
         }
+        
         m_estimator.unlock();
         m_buf.lock();
         m_state.lock();

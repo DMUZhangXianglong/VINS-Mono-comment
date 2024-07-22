@@ -88,6 +88,7 @@ void Estimator::clearState()
  * @param {Vector3d} &angular_velocity:角速度
  * @return {*}
  */
+// 
 void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity)
 {   
     // 是否处理了第一帧IMU数据
@@ -111,11 +112,15 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         
         pre_integrations[frame_count]->push_back(dt, linear_acceleration, angular_velocity);
         //if(solver_flag != NON_LINEAR)
+        // 临时预积分
         tmp_pre_integration->push_back(dt, linear_acceleration, angular_velocity);
 
         dt_buf[frame_count].push_back(dt);
+        
+        // 速度和角速度缓存队列 
         linear_acceleration_buf[frame_count].push_back(linear_acceleration);
         angular_velocity_buf[frame_count].push_back(angular_velocity);
+
 
         int j = frame_count;         
         Vector3d un_acc_0 = Rs[j] * (acc_0 - Bas[j]) - g;
@@ -123,6 +128,7 @@ void Estimator::processIMU(double dt, const Vector3d &linear_acceleration, const
         Rs[j] *= Utility::deltaQ(un_gyr * dt).toRotationMatrix();
         Vector3d un_acc_1 = Rs[j] * (linear_acceleration - Bas[j]) - g;
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
+        
         Ps[j] += dt * Vs[j] + 0.5 * dt * dt * un_acc;
         Vs[j] += dt * un_acc;
     }

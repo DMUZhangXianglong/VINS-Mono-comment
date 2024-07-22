@@ -47,8 +47,10 @@ class IntegrationBase
     {
         // 加入时间差缓存
         dt_buf.push_back(dt);
+        // 加速度 角速度加入向量中
         acc_buf.push_back(acc);
         gyr_buf.push_back(gyr);
+        // 传播 递推
         propagate(dt, acc, gyr);
     }
 
@@ -81,23 +83,24 @@ class IntegrationBase
                             Eigen::Vector3d &result_linearized_ba, Eigen::Vector3d &result_linearized_bg, bool update_jacobian)
     {
         //ROS_INFO("midpoint integration");
-        // 中值积分法3
-        
-        // 0 时刻加速度
+        // 中值积分法
+        // t-1时刻的加速度
         Vector3d un_acc_0 = delta_q * (_acc_0 - linearized_ba);
-        // 计算均值
+       
+        // t-1到t的角速度平均值
         Vector3d un_gyr = 0.5 * (_gyr_0 + _gyr_1) - linearized_bg;
 
-        // 更新旋转
+        // t+1时刻的姿态四元数
         result_delta_q = delta_q * Quaterniond(1, un_gyr(0) * _dt / 2, un_gyr(1) * _dt / 2, un_gyr(2) * _dt / 2);
 
-        // 1 时刻加速度
+        // t+1时刻的姿态四元数
         Vector3d un_acc_1 = result_delta_q * (_acc_1 - linearized_ba);
 
-        // 计算加速度均值
+        // t到t+1时刻的加速度均值
         Vector3d un_acc = 0.5 * (un_acc_0 + un_acc_1);
+
+        // 
         result_delta_p = delta_p + delta_v * _dt + 0.5 * un_acc * _dt * _dt;
-        
         result_delta_v = delta_v + un_acc * _dt;
         result_linearized_ba = linearized_ba;
         result_linearized_bg = linearized_bg;         
@@ -164,15 +167,22 @@ class IntegrationBase
     void propagate(double _dt, const Eigen::Vector3d &_acc_1, const Eigen::Vector3d &_gyr_1)
     {
         dt = _dt;
+        // 当前时刻的加速度和角速度
         acc_1 = _acc_1;
         gyr_1 = _gyr_1;
+        
+        // 结果
         Vector3d result_delta_p;
         Quaterniond result_delta_q;
         Vector3d result_delta_v;
+        // 线性化后的加速度 和 角速度 偏置
         Vector3d result_linearized_ba;
         Vector3d result_linearized_bg;
 
-        // 中点积分
+        // 中值积分
+        // 需要的变量是 上一时刻 加速度 角速度 D{p v q}  2个偏置
+        // 当前时刻的 加速度 角速度
+        // 计算出的结果是 当前时刻的 D{p v q} 和 2个偏置
         midPointIntegration(_dt, acc_0, gyr_0, _acc_1, _gyr_1, delta_p, delta_q, delta_v,
                             linearized_ba, linearized_bg,
                             result_delta_p, result_delta_q, result_delta_v,
@@ -180,18 +190,22 @@ class IntegrationBase
 
         //checkJacobian(_dt, acc_0, gyr_0, acc_1, gyr_1, delta_p, delta_q, delta_v,
         //                    linearized_ba, linearized_bg);
-       
+
+
         delta_p = result_delta_p;
         delta_q = result_delta_q;
         delta_v = result_delta_v;
+        // 实际上偏置没变
         linearized_ba = result_linearized_ba;
         linearized_bg = result_linearized_bg;
         delta_q.normalize();
+
         sum_dt += dt;
         acc_0 = acc_1;
         gyr_0 = gyr_1;  
      
     }
+    
 
     Eigen::Matrix<double, 15, 1> evaluate(const Eigen::Vector3d &Pi, const Eigen::Quaterniond &Qi, const Eigen::Vector3d &Vi, const Eigen::Vector3d &Bai, const Eigen::Vector3d &Bgi,
                                           const Eigen::Vector3d &Pj, const Eigen::Quaterniond &Qj, const Eigen::Vector3d &Vj, const Eigen::Vector3d &Baj, const Eigen::Vector3d &Bgj)
@@ -234,6 +248,7 @@ class IntegrationBase
     // 噪声矩阵
     Eigen::Matrix<double, 18, 18> noise;
 
+    // 积分时间
     double sum_dt;
     Eigen::Vector3d delta_p;
     Eigen::Quaterniond delta_q;
@@ -244,6 +259,7 @@ class IntegrationBase
     std::vector<Eigen::Vector3d> gyr_buf;
 
 };
+
 /*
 
     void eulerIntegration(double _dt, const Eigen::Vector3d &_acc_0, const Eigen::Vector3d &_gyr_0,

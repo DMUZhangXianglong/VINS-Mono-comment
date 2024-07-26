@@ -1,7 +1,7 @@
 /*
  * @Author: DMU zhangxianglong
  * @Date: 2024-07-09 22:09:51
- * @LastEditTime: 2024-07-16 09:40:00
+ * @LastEditTime: 2024-07-22 17:08:21
  * @LastEditors: DMU zhangxianglong
  * @FilePath: /VINS-Mono-comment/vins_estimator/src/estimator.h
  * @Description: 

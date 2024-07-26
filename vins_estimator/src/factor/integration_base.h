@@ -81,7 +81,7 @@ class IntegrationBase
                             Eigen::Vector3d &result_linearized_ba, Eigen::Vector3d &result_linearized_bg, bool update_jacobian)
     {
         //ROS_INFO("midpoint integration");
-        // 中值积分法3
+        // 中值积分法
         
         // 0 时刻加速度
         Vector3d un_acc_0 = delta_q * (_acc_0 - linearized_ba);
